@@ -339,23 +339,32 @@
     const n = values.length || 1;
     const gap = 6;
     const barW = Math.max(6, (w - pad*2 - gap*(n-1)) / n);
+    const showLabels = opts.labels === true;
+    const labelFmt = typeof opts.labelFmt === "function" ? opts.labelFmt : (v)=> String(Math.round(v));
     let x = pad;
-    const rects = values.map(v=>{
-      const val = Number(v||0);
-      const bh = (h - pad*2) * (val / max);
-      const y = h - pad - bh;
-      const r = 8;
-      const out = `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="${r}" ry="${r}" fill="rgba(37,99,235,.55)"></rect>`;
-      x += barW + gap;
-      return out;
-    }).join("");
-    return `
+
+    let svg = `
       <svg viewBox="0 0 ${w} ${h}" width="100%" height="100%" preserveAspectRatio="none">
         <rect x="0" y="0" width="${w}" height="${h}" fill="rgba(255,255,255,0)"></rect>
         <line x1="${pad}" y1="${h-pad}" x2="${w-pad}" y2="${h-pad}" stroke="rgba(230,233,245,1)" stroke-width="2"></line>
-        ${rects}
-      </svg>
     `;
+
+    for(const raw of values){
+      const val = Number(raw||0);
+      const bh = (h - pad*2 - (showLabels?14:0)) * (val / max);
+      const y = h - pad - bh;
+      const r = 8;
+      svg += `<rect x="${x}" y="${y}" width="${barW}" height="${bh}" rx="${r}" ry="${r}" fill="rgba(37,99,235,.55)"></rect>`;
+      if(showLabels){
+        const tx = x + barW/2;
+        const ty = Math.max(pad+10, y - 6);
+        svg += `<text x="${tx}" y="${ty}" text-anchor="middle" font-size="12" font-weight="900" fill="rgba(15,23,42,.75)">${labelFmt(val)}</text>`;
+      }
+      x += barW + gap;
+    }
+
+    svg += `</svg>`;
+    return svg;
   }
 
   function progressHTML(current, goal){
@@ -383,6 +392,8 @@
 
     const tf = totalsFinance();
 
+    const totalKcalAll = state.fitnessSessions.reduce((a,b)=>a+Number(b.calories||0),0);
+
     // debt goal per month
     const curMonth = monthKey(todayISO());
     const monthDebtPay = state.financeTx
@@ -391,11 +402,11 @@
 
     // charts: last 6 weeks km
     const weeks = [];
-    const kmVals = [];
+    const kcalVals = [];
     for(let i=5;i>=0;i--){
       const start = addDaysISO(ws, -7*i);
       weeks.push(start);
-      kmVals.push(weekTotalsFitness(start).km);
+      kcalVals.push(weekTotalsFitness(start).kcal);
     }
 
     view.innerHTML = `
@@ -416,6 +427,14 @@
               <div class="value">${fmtNum(wFit.kcal,0)} kcal</div>
               ${progressHTML(wFit.kcal, state.settings.weeklyKcalGoal)}
             </div>
+          
+            <div class="kpi">
+              <div class="label">Calorías (total)</div>
+              <div class="value">${fmtNum(totalKcalAll,0)} kcal</div>
+              <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Semana actual: <b>${fmtNum(wFit.kcal,0)} kcal</b></div>
+              <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Acumulado histórico (trote + natación)</div>
+            </div>
+
           </div>
 
           <div class="grid" style="grid-template-columns:1fr 1fr; gap:14px; margin-top:12px;">
@@ -432,8 +451,8 @@
           </div>
 
           <hr class="sep"/>
-          <div class="muted" style="font-weight:950; margin-bottom:8px;">KM últimas 6 semanas</div>
-          <div class="miniChart">${svgBars(kmVals)}</div>
+          <div class="muted" style="font-weight:950; margin-bottom:8px;">Kcal últimas 6 semanas</div>
+          <div class="miniChart">${svgBars(kcalVals, {labels:true, labelFmt:(v)=> String(Math.round(v))})}</div>
 
           <hr class="sep"/>
           <div class="flex">
@@ -766,6 +785,7 @@
           <h3 style="margin:0;">Últimas sesiones</h3>
           <div class="spacer"></div>
           <span class="badge">Total sesiones: ${state.fitnessSessions.length}</span>
+          <span class="badge">Kcal total: ${fmtNum(state.fitnessSessions.reduce((a,b)=>a+Number(b.calories||0),0),0)} kcal</span>
         </div>
         <div class="tablewrap" style="margin-top:10px;">
           ${fitnessTable(sessions)}
@@ -864,6 +884,8 @@
     const now = new Date();
     const y = now.getFullYear(), m = now.getMonth();
     const tf = totalsFinance();
+
+    const totalKcalAll = state.fitnessSessions.reduce((a,b)=>a+Number(b.calories||0),0);
     const tx = state.financeTx.slice().sort((a,b)=> a.date < b.date ? 1 : -1).slice(0, 120);
 
     view.innerHTML = `
