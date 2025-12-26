@@ -164,7 +164,7 @@
     // Pull inicial
     try{
       const ref = window.FB.db.ref(firebasePath());
-      ref.get().then((snap)=>{
+      ref.once("value").then((snap)=>{
         const val = snap.val();
         if(val){
           applyRemoteState(val);

@@ -5,6 +5,7 @@
     apiKey: "AIzaSyBPhgr32Jk-NERmIBodqcMYAJt-_-IxU0A",
     authDomain: "gustavopersonal-8f5fc.firebaseapp.com",
     projectId: "gustavopersonal-8f5fc",
+    databaseURL: "https://gustavopersonal-8f5fc-default-rtdb.firebaseio.com",
     storageBucket: "gustavopersonal-8f5fc.firebasestorage.app",
     messagingSenderId: "1073863078622",
     appId: "1:1073863078622:web:b4c5398517293700bd884f",
