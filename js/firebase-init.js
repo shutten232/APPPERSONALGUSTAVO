@@ -1,9 +1,8 @@
-/* Firebase init (Compat) */
+/* Firebase init (Compat) - Firestore */
 (function(){
   const firebaseConfig = {
     apiKey: "AIzaSyBPhgr32Jk-NERmIBodqcMYAJt-_-IxU0A",
     authDomain: "gustavopersonal-8f5fc.firebaseapp.com",
-    databaseURL: "https://gustavopersonal-8f5fc-default-rtdb.firebaseio.com",
     projectId: "gustavopersonal-8f5fc",
     storageBucket: "gustavopersonal-8f5fc.firebasestorage.app",
     messagingSenderId: "1073863078622",
@@ -16,21 +15,12 @@
   window.FB = {
     enabled: true,
     auth: firebase.auth(),
-    db: firebase.database(),
+    fs: firebase.firestore(),
     uid: null,
-    connected: null,
     lastError: null
   };
 
-  // RTDB connected flag
-  try{
-    window.FB.db.ref(".info/connected").on("value", (snap)=>{
-      window.FB.connected = !!snap.val();
-      window.dispatchEvent(new CustomEvent("fb-conn", { detail:{ connected: window.FB.connected }}));
-    });
-  }catch(e){}
-
-  // Anonymous auth
+  // Login anónimo
   window.FB.auth.signInAnonymously().catch((err)=>{
     window.FB.enabled = false;
     window.FB.lastError = err ? (err.code || err.message || String(err)) : "auth-error";

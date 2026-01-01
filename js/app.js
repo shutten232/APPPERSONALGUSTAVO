@@ -90,91 +90,88 @@
     return out;
   }
 
-  // ---------------- Firebase Sync (Realtime Database) ----------------
-  // Requiere servir la app por http/https (no file://) para que Firebase funcione bien.
-  // Path: /users/{uid}/state
+  // ---------------- Firebase Sync (Firestore) ----------------
+  // Path: /users/{uid}/state/main
   let fbReady = false;
   let fbUid = null;
-  let fbConnected = null;
-  let fbLastError = null;
   let fbUnsub = null;
   let pushing = false;
-  let lastSyncAt = null;
-  let lastSyncError = null;
   let pullApplied = false;
   let pushTimer = null;
+  let lastSyncAt = null;
+  let lastSyncError = null;
 
   function fbAvailable(){
-    return !!(window.FB && window.FB.enabled && window.FB.db && window.FB.auth);
+    return !!(window.FB && window.FB.enabled && window.FB.fs && window.FB.auth);
   }
 
-  function firebasePath(){
-    return `users/${fbUid}/state`;
+  function firestoreDocRef(){
+    // users/{uid}/state/main
+    return window.FB.fs.collection("users").doc(fbUid).collection("state").doc("main");
   }
 
   function applyRemoteState(remote){
     if(!remote || typeof remote !== "object") return;
-    // Merge para no romper defaults
     state = merge(remote, DEFAULT);
-    // Guardar en local para abrir rápido la próxima
     localStorage.setItem(KEY, JSON.stringify(state));
     pullApplied = true;
     toast("Sincronizado");
     render();
   }
 
-  function attachFirebaseListener(){
+  function attachFirestoreListener(){
     if(!fbAvailable() || !fbUid) return;
     try{
-      const ref = window.FB.db.ref(firebasePath());
-      // Listener único
-      if(fbUnsub){ fbUnsub.off(); fbUnsub = null; }
-      fbUnsub = ref;
-      ref.on("value", (snap)=>{
-        const val = snap.val();
-        // Evitar pisar si recién arrancaste y no hay data en cloud
-        if(val === null) return;
-        // Evitar loop: si nosotros estamos empujando, igual dejamos que actualice (es el mismo estado)
-        applyRemoteState(val);
+      const ref = firestoreDocRef();
+      if(typeof fbUnsub === "function"){ fbUnsub(); fbUnsub = null; }
+      fbUnsub = ref.onSnapshot((doc)=>{
+        if(!doc.exists) return;
+        const data = doc.data();
+        if(data && data.state){
+          applyRemoteState(data.state);
+        }
+      }, (err)=>{
+        lastSyncError = err ? (err.code || err.message || String(err)) : "listen-error";
+        console.error("[FS] listen error:", err);
       });
     }catch(e){
-      // si falla, queda local
+      lastSyncError = e ? (e.message || String(e)) : "listen-error";
     }
   }
 
-  function scheduleFirebasePush(){
+  function scheduleFirestorePush(){
     if(!fbAvailable() || !fbUid) return;
     clearTimeout(pushTimer);
-    pushTimer = setTimeout(()=>{
-      firebasePushNow();
-    }, 600); // debounce
+    pushTimer = setTimeout(()=> firestorePushNow(), 600);
   }
 
-  function firebasePushNow(){
+  function firestorePushNow(){
     if(!fbAvailable() || !fbUid) return;
     try{
       pushing = true;
       lastSyncError = null;
-      const ref = window.FB.db.ref(firebasePath());
-      ref.set(state).then(()=>{
-        lastSyncAt = Date.now();
-        try{ toast("Guardado en la nube"); }catch(e){}
-      }).catch((err)=>{
-        lastSyncError = err ? (err.code || err.message || String(err)) : "write-error";
-        console.error("[FB] write error:", err);
-        try{ toast("No se pudo guardar en la nube"); }catch(e){}
-      }).finally(()=>{
-        pushing = false;
-      });
+      const ref = firestoreDocRef();
+      ref.set({ state, updatedAt: firebase.firestore.FieldValue.serverTimestamp() }, { merge: false })
+        .then(()=>{
+          lastSyncAt = Date.now();
+          toast("Guardado en la nube");
+        })
+        .catch((err)=>{
+          lastSyncError = err ? (err.code || err.message || String(err)) : "write-error";
+          console.error("[FS] write error:", err);
+          toast("No se pudo guardar en la nube");
+        })
+        .finally(()=>{ pushing = false; });
     }catch(e){
       lastSyncError = e ? (e.message || String(e)) : "write-error";
       pushing = false;
+      toast("No se pudo guardar en la nube");
     }
   }
 
-  // Cuando Firebase autentica, intentamos pull inicial si hay data y luego listener
-  window.addEventListener("fb-conn",(ev)=>{ fbConnected = ev.detail && typeof ev.detail.connected==="boolean" ? ev.detail.connected : fbConnected; });
-  window.addEventListener("fb-error",(ev)=>{ fbLastError = ev.detail && ev.detail.error ? ev.detail.error : fbLastError; });
+  // Hook: cada save() también empuja a Firestore (debounce)
+  function scheduleFirebasePush(){ scheduleFirestorePush(); }
+  function firebasePushNow(){ firestorePushNow(); }
 
   window.addEventListener("fb-auth-ready", (ev)=>{
     fbUid = ev.detail && ev.detail.uid ? ev.detail.uid : null;
@@ -183,21 +180,22 @@
 
     // Pull inicial
     try{
-      const ref = window.FB.db.ref(firebasePath());
-      ref.once("value").then((snap)=>{
-        const val = snap.val();
-        if(val){
-          applyRemoteState(val);
+      const ref = firestoreDocRef();
+      ref.get().then((doc)=>{
+        if(doc.exists){
+          const data = doc.data();
+          if(data && data.state) applyRemoteState(data.state);
         }else{
-          // Si no hay data en cloud, subimos la local una vez
-          firebasePushNow();
+          // si no hay data, subimos la local
+          firestorePushNow();
         }
-        attachFirebaseListener();
-      }).catch(()=>{
-        attachFirebaseListener();
+        attachFirestoreListener();
+      }).catch((err)=>{
+        lastSyncError = err ? (err.code || err.message || String(err)) : "read-error";
+        attachFirestoreListener();
       });
     }catch(e){
-      // noop
+      attachFirestoreListener();
     }
   });
   // ------------------------------------------------------------------
@@ -1121,17 +1119,6 @@ function pctDelta(curr, prev){
       <div class="grid cols-2">
         <div class="card">
           <h2>Ajustes</h2>
-          <div class="note" style="margin-top:10px;">
-            <b>Estado Firebase</b>
-            <br/>UID: <b>${fbUid || "—"}</b>
-            <br/>Conectado: <b>${fbConnected===null ? "—" : (fbConnected ? "Sí" : "No")}</b>
-            <br/>Último sync: <b>${lastSyncAt ? new Date(lastSyncAt).toLocaleString("es-AR") : "—"}</b>
-            <br/>Último error: <b>${(fbLastError || lastSyncError || "—")}</b>
-            <div class="flex" style="margin-top:10px;">
-              <button class="btn" type="button" id="btnTestCloud">Probar guardar</button>
-              <button class="btn" type="button" id="btnForcePull">Forzar leer</button>
-            </div>
-          </div>
           <div class="muted">Base, deuda, metas y factores de calorías.</div>
           <hr class="sep"/>
 
@@ -1239,32 +1226,6 @@ function pctDelta(curr, prev){
       toast("Ajustes guardados");
       renderSettings();
     });
-
-    bindFirebaseDebugButtons();
-  }
-
-  // Botones de debug Firebase (solo en Ajustes)
-  function bindFirebaseDebugButtons(){
-    const b1 = $("#btnTestCloud");
-    if(b1){
-      b1.addEventListener("click", ()=>{
-        if(!fbAvailable() || !fbUid){ toast("Firebase no listo"); return; }
-        firebasePushNow();
-      });
-    }
-    const b2 = $("#btnForcePull");
-    if(b2){
-      b2.addEventListener("click", ()=>{
-        if(!fbAvailable() || !fbUid){ toast("Firebase no listo"); return; }
-        try{
-          window.FB.db.ref(firebasePath()).once("value").then((snap)=>{
-            const val = snap.val();
-            if(val){ applyRemoteState(val); toast("Leído de la nube"); }
-            else { toast("La nube está vacía"); }
-          }).catch(()=> toast("No se pudo leer"));
-        }catch(e){ toast("No se pudo leer"); }
-      });
-    }
   }
 
   function renderCalendar(year, month, pillsFn){
