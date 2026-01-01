@@ -52,7 +52,11 @@
       // GOALS
       weeklyKmGoal: 30,
       weeklyKcalGoal: 2500,
-      monthlyDebtPayGoal: 200000
+      monthlyDebtPayGoal: 200000,
+
+      // HISTÓRICO PREVIO (para sumar a lo que cargues acá)
+      baselineTrainedDays: 514,
+      baselineKm: 2600
     },
     fitnessSessions: [],
     financeTx: []
@@ -189,6 +193,11 @@
   const view = $("#view");
   const tabs = $$(".tab");
 
+  // FAB (mobile): ir a "Hoy"
+  const fab = $("#fabAdd");
+  if(fab){ fab.addEventListener("click", ()=> setRoute("today")); }
+
+
   tabs.forEach(t=>{
     t.addEventListener("click", ()=>{
       route = t.dataset.route;
@@ -312,7 +321,20 @@
     return { income, expenses, debtPay };
   }
 
-  function pctDelta(curr, prev){
+  
+  function totalTrainedDays(){
+    const set = new Set();
+    for(const s of state.fitnessSessions){
+      if(s && s.date) set.add(s.date);
+    }
+    return Number(state.settings.baselineTrainedDays||0) + set.size;
+  }
+
+  function totalKmAll(){
+    const km = state.fitnessSessions.reduce((a,b)=>a+Number((b&&b.distanceKm)||0),0);
+    return Number(state.settings.baselineKm||0) + km;
+  }
+function pctDelta(curr, prev){
     if(prev === 0) return curr === 0 ? 0 : 100;
     return ((curr - prev) / prev) * 100;
   }
@@ -393,6 +415,8 @@
     const tf = totalsFinance();
 
     const totalKcalAll = state.fitnessSessions.reduce((a,b)=>a+Number(b.calories||0),0);
+    const trainedDaysTotal = totalTrainedDays();
+    const kmTotalAll = totalKmAll();
 
     // debt goal per month
     const curMonth = monthKey(todayISO());
@@ -433,6 +457,19 @@
               <div class="value">${fmtNum(totalKcalAll,0)} kcal</div>
               <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Semana actual: <b>${fmtNum(wFit.kcal,0)} kcal</b></div>
               <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Acumulado histórico (trote + natación)</div>
+            </div>
+
+          
+            <div class="kpi">
+              <div class="label">Días entrenados (total)</div>
+              <div class="value">${fmtNum(trainedDaysTotal,0)} días</div>
+              <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Incluye histórico previo</div>
+            </div>
+
+            <div class="kpi">
+              <div class="label">KM (total)</div>
+              <div class="value">${fmtNum(kmTotalAll,2)} km</div>
+              <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Incluye histórico previo</div>
             </div>
 
           </div>
@@ -477,6 +514,19 @@
               <div class="label">Deuda restante</div>
               <div class="value ${tf.debtLeft===0?'good':''}">${fmtARS(tf.debtLeft)}</div>
             </div>
+          
+            <div class="kpi">
+              <div class="label">Días entrenados (total)</div>
+              <div class="value">${fmtNum(trainedDaysTotal,0)} días</div>
+              <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Incluye histórico previo</div>
+            </div>
+
+            <div class="kpi">
+              <div class="label">KM (total)</div>
+              <div class="value">${fmtNum(kmTotalAll,2)} km</div>
+              <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Incluye histórico previo</div>
+            </div>
+
           </div>
 
           <div class="grid" style="grid-template-columns:1fr 1fr; gap:14px; margin-top:12px;">
@@ -539,6 +589,19 @@
               <div class="label">Finanzas</div>
               <div class="value">${fmtARS(todayIncome - todayExp - todayDebt)}</div>
             </div>
+          
+            <div class="kpi">
+              <div class="label">Días entrenados (total)</div>
+              <div class="value">${fmtNum(trainedDaysTotal,0)} días</div>
+              <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Incluye histórico previo</div>
+            </div>
+
+            <div class="kpi">
+              <div class="label">KM (total)</div>
+              <div class="value">${fmtNum(kmTotalAll,2)} km</div>
+              <div class="muted" style="font-size:12px;font-weight:900;margin-top:6px;">Incluye histórico previo</div>
+            </div>
+
           </div>
 
           <div class="grid" style="grid-template-columns:1fr 1fr; gap:14px; margin-top:12px;">
@@ -785,6 +848,8 @@
           <h3 style="margin:0;">Últimas sesiones</h3>
           <div class="spacer"></div>
           <span class="badge">Total sesiones: ${state.fitnessSessions.length}</span>
+          <span class="badge">Días entrenados: ${fmtNum(totalTrainedDays(),0)}</span>
+          <span class="badge">KM total: ${fmtNum(totalKmAll(),2)} km</span>
           <span class="badge">Kcal total: ${fmtNum(state.fitnessSessions.reduce((a,b)=>a+Number(b.calories||0),0),0)} kcal</span>
         </div>
         <div class="tablewrap" style="margin-top:10px;">
@@ -886,6 +951,8 @@
     const tf = totalsFinance();
 
     const totalKcalAll = state.fitnessSessions.reduce((a,b)=>a+Number(b.calories||0),0);
+    const trainedDaysTotal = totalTrainedDays();
+    const kmTotalAll = totalKmAll();
     const tx = state.financeTx.slice().sort((a,b)=> a.date < b.date ? 1 : -1).slice(0, 120);
 
     view.innerHTML = `
@@ -1064,6 +1131,17 @@
               </div>
             </div>
 
+            <div class="grid" style="grid-template-columns:1fr 1fr; gap:14px;">
+              <div class="field">
+                <label>Histórico previo: días entrenados</label>
+                <input class="input" type="number" name="baselineTrainedDays" min="0" step="1" value="${Number(state.settings.baselineTrainedDays||0)}">
+              </div>
+              <div class="field">
+                <label>Histórico previo: KM acumulados</label>
+                <input class="input" type="number" name="baselineKm" min="0" step="0.01" value="${Number(state.settings.baselineKm||0)}">
+              </div>
+            </div>
+
             <hr class="sep"/>
 
             <div class="grid" style="grid-template-columns:1fr 1fr; gap:14px;">
@@ -1120,6 +1198,9 @@
       s.weeklyIncome = Number(fd.get("weeklyIncome")||0);
       s.debtTotal = Number(fd.get("debtTotal")||0);
       s.monthlyDebtPayGoal = Number(fd.get("monthlyDebtPayGoal")||0);
+
+      s.baselineTrainedDays = Number(fd.get("baselineTrainedDays")||0);
+      s.baselineKm = Number(fd.get("baselineKm")||0);
 
       s.weeklyKmGoal = Number(fd.get("weeklyKmGoal")||0);
       s.weeklyKcalGoal = Number(fd.get("weeklyKcalGoal")||0);

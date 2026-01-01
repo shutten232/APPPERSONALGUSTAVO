@@ -316,3 +316,67 @@ body{
   box-shadow: var(--shadow2);
   overflow:hidden;
 }
+
+
+/* ---------------- Mobile / Responsive ---------------- */
+@media (max-width: 560px){
+  .wrap{padding: 0 12px;}
+  .topbar__row{padding:10px 12px;}
+  .main{padding:12px 12px 86px 12px;}
+
+  .brand__title{font-size:15px;}
+  .brand__sub{font-size:11px;}
+
+  .tabs{
+    padding: 0 12px 10px 12px;
+    flex-wrap:nowrap;
+    overflow-x:auto;
+    -webkit-overflow-scrolling: touch;
+    scrollbar-width: none;
+  }
+  .tabs::-webkit-scrollbar{display:none;}
+  .tab{white-space:nowrap; padding:9px 12px;}
+
+  .card{padding:12px;}
+  .kpi .value{font-size:20px;}
+
+  .grid.cols-2{grid-template-columns:1fr !important;}
+  .grid.cols-3{grid-template-columns:1fr !important;}
+
+  form .grid[style*="grid-template-columns:1fr 1fr"]{
+    grid-template-columns: 1fr !important;
+  }
+
+  .day{min-height:72px; padding:7px;}
+  .pill{padding:3px 7px;}
+
+  .tablewrap{border-radius:14px;}
+  .table{min-width: 640px;}
+  .btn{width:100%; justify-content:center;}
+  .btn.small{width:auto;}
+  .flex .btn{width:auto;}
+  .miniChart{height:140px;}
+}
+
+/* Floating quick button for mobile */
+.fab{
+  position: fixed;
+  right: 14px;
+  bottom: 14px;
+  width: 54px;
+  height: 54px;
+  border-radius: 18px;
+  border:1px solid rgba(37,99,235,.25);
+  background: linear-gradient(180deg, rgba(37,99,235,.20), rgba(37,99,235,.10));
+  box-shadow: var(--shadow);
+  font-weight: 1000;
+  font-size: 22px;
+  color: var(--text);
+  cursor: pointer;
+  display: none;
+  align-items:center;
+  justify-content:center;
+}
+@media (max-width: 560px){
+  .fab{display:flex;}
+}
