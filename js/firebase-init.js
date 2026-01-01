@@ -17,11 +17,25 @@
     enabled: true,
     auth: firebase.auth(),
     db: firebase.database(),
-    uid: null
+    uid: null,
+    connected: null,
+    lastError: null
   };
 
-  window.FB.auth.signInAnonymously().catch(()=>{
+  // RTDB connected flag
+  try{
+    window.FB.db.ref(".info/connected").on("value", (snap)=>{
+      window.FB.connected = !!snap.val();
+      window.dispatchEvent(new CustomEvent("fb-conn", { detail:{ connected: window.FB.connected }}));
+    });
+  }catch(e){}
+
+  // Anonymous auth
+  window.FB.auth.signInAnonymously().catch((err)=>{
     window.FB.enabled = false;
+    window.FB.lastError = err ? (err.code || err.message || String(err)) : "auth-error";
+    console.error("[FB] auth error:", err);
+    window.dispatchEvent(new CustomEvent("fb-error", { detail:{ where:"auth", error: window.FB.lastError }}));
   });
 
   window.FB.auth.onAuthStateChanged((user)=>{

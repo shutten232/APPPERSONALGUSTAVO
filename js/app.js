@@ -95,8 +95,12 @@
   // Path: /users/{uid}/state
   let fbReady = false;
   let fbUid = null;
+  let fbConnected = null;
+  let fbLastError = null;
   let fbUnsub = null;
   let pushing = false;
+  let lastSyncAt = null;
+  let lastSyncError = null;
   let pullApplied = false;
   let pushTimer = null;
 
@@ -150,16 +154,28 @@
     if(!fbAvailable() || !fbUid) return;
     try{
       pushing = true;
+      lastSyncError = null;
       const ref = window.FB.db.ref(firebasePath());
-      ref.set(state).finally(()=>{
+      ref.set(state).then(()=>{
+        lastSyncAt = Date.now();
+        try{ toast("Guardado en la nube"); }catch(e){}
+      }).catch((err)=>{
+        lastSyncError = err ? (err.code || err.message || String(err)) : "write-error";
+        console.error("[FB] write error:", err);
+        try{ toast("No se pudo guardar en la nube"); }catch(e){}
+      }).finally(()=>{
         pushing = false;
       });
     }catch(e){
+      lastSyncError = e ? (e.message || String(e)) : "write-error";
       pushing = false;
     }
   }
 
   // Cuando Firebase autentica, intentamos pull inicial si hay data y luego listener
+  window.addEventListener("fb-conn",(ev)=>{ fbConnected = ev.detail && typeof ev.detail.connected==="boolean" ? ev.detail.connected : fbConnected; });
+  window.addEventListener("fb-error",(ev)=>{ fbLastError = ev.detail && ev.detail.error ? ev.detail.error : fbLastError; });
+
   window.addEventListener("fb-auth-ready", (ev)=>{
     fbUid = ev.detail && ev.detail.uid ? ev.detail.uid : null;
     if(!fbUid) return;
@@ -1105,6 +1121,17 @@ function pctDelta(curr, prev){
       <div class="grid cols-2">
         <div class="card">
           <h2>Ajustes</h2>
+          <div class="note" style="margin-top:10px;">
+            <b>Estado Firebase</b>
+            <br/>UID: <b>${fbUid || "—"}</b>
+            <br/>Conectado: <b>${fbConnected===null ? "—" : (fbConnected ? "Sí" : "No")}</b>
+            <br/>Último sync: <b>${lastSyncAt ? new Date(lastSyncAt).toLocaleString("es-AR") : "—"}</b>
+            <br/>Último error: <b>${(fbLastError || lastSyncError || "—")}</b>
+            <div class="flex" style="margin-top:10px;">
+              <button class="btn" type="button" id="btnTestCloud">Probar guardar</button>
+              <button class="btn" type="button" id="btnForcePull">Forzar leer</button>
+            </div>
+          </div>
           <div class="muted">Base, deuda, metas y factores de calorías.</div>
           <hr class="sep"/>
 
@@ -1212,6 +1239,32 @@ function pctDelta(curr, prev){
       toast("Ajustes guardados");
       renderSettings();
     });
+
+    bindFirebaseDebugButtons();
+  }
+
+  // Botones de debug Firebase (solo en Ajustes)
+  function bindFirebaseDebugButtons(){
+    const b1 = $("#btnTestCloud");
+    if(b1){
+      b1.addEventListener("click", ()=>{
+        if(!fbAvailable() || !fbUid){ toast("Firebase no listo"); return; }
+        firebasePushNow();
+      });
+    }
+    const b2 = $("#btnForcePull");
+    if(b2){
+      b2.addEventListener("click", ()=>{
+        if(!fbAvailable() || !fbUid){ toast("Firebase no listo"); return; }
+        try{
+          window.FB.db.ref(firebasePath()).once("value").then((snap)=>{
+            const val = snap.val();
+            if(val){ applyRemoteState(val); toast("Leído de la nube"); }
+            else { toast("La nube está vacía"); }
+          }).catch(()=> toast("No se pudo leer"));
+        }catch(e){ toast("No se pudo leer"); }
+      });
+    }
   }
 
   function renderCalendar(year, month, pillsFn){
